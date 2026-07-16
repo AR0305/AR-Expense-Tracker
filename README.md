@@ -1,9 +1,18 @@
-<h1 align="center">AR Expense Tracker </h1>
+<h1 align="center">AR Expense Tracker 🚀</h1>
 
 <p align="center">
   <strong>Take control of your money, not the other way around.</strong><br>
   A beautiful, feature-rich expense tracker with zero subscriptions, zero ads, and 100% free Google Drive sync. Built for those who value privacy and premium design.
 </p>
+
+---
+
+## 📦 How to Install
+
+### [⬇️ Download Latest APK](https://github.com/AR0305/AR-Expense-Tracker/releases/latest)
+
+You can download the highly-optimized release APK directly from the Releases page using the link above! 
+Simply tap the `.apk` file to download and install it on your Android device.
 
 ---
 
@@ -82,12 +91,7 @@ This app is built for maximum speed and stability:
 * **Vision/OCR:** Native on-device text recognition processing
 * **UI/UX:** Custom physics-based animations and dynamic charts
 
----
 
-## 📦 How to Install
-You can download the latest highly-optimized release APK directly from the **Releases** tab on the right side of this page! 
-
-Simply tap the `.apk` file to download and install it on your Android device.
 
 ---
 
