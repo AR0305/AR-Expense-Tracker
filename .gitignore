@@ -1,0 +1,35 @@
+# Private / local
+Screenshots/
+.vscode/
+**/build/
+**/.claude/
+**/.idea/
+**/.agents/
+*.iml
+
+# Flutter / Dart build output
+ar_expense_tracker/build/
+ar_expense_tracker/android/.kotlin/
+ar_expense_tracker/.dart_tool/
+ar_expense_tracker/.flutter-plugins
+ar_expense_tracker/.flutter-plugins-dependencies
+ar_expense_tracker/.pub-cache/
+ar_expense_tracker/.pub/
+
+ar_expense_tracker/.claude/
+ar_expense_tracker/.agents/
+
+# Private project docs
+/agent.md
+/Expense_Tracker_Architecture_Plan.md
+/flow.md
+
+# Android secrets / local paths
+ar_expense_tracker/android/local.properties
+ar_expense_tracker/android/key.properties
+*.jks
+*.keystore
+
+# OS files
+.DS_Store
+Thumbs.db
