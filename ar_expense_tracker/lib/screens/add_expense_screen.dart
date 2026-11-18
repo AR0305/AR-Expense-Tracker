@@ -495,7 +495,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
             );
 
             if (mounted) {
-              Navigator.pop(context); // Close AddExpenseScreen
+              Navigator.pop(context, true); // Close AddExpenseScreen (true = saved)
               Navigator.pushReplacement(
                 context, 
                 MaterialPageRoute(builder: (_) => HomeScreen(group: targetGroup!))
@@ -557,7 +557,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       }
       
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context, true); // true = saved
       }
     }
   }

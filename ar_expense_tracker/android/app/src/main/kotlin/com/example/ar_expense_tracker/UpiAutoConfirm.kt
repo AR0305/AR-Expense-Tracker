@@ -32,6 +32,8 @@ object UpiAutoConfirm {
 
     private const val STORE_NAME = "upi_auto_confirm_store"
     private const val KEY_PREFIX = "pending_"
+    private const val KEY_ADDED_PREFIX = "added_"
+    private const val ADDED_TTL_MS = 24L * 60 * 60 * 1000
     private const val FLUTTER_PREFS = "FlutterSharedPreferences"
     private const val KEY_MINUTES = "flutter.upi_auto_confirm_minutes"
     private const val KEY_APPROVED_QUEUE = "flutter.pending_upi_approved_queue"
@@ -96,6 +98,35 @@ object UpiAutoConfirm {
         takePending(context, notificationId)
     }
 
+    /** True while a prompt with this id is still waiting for an answer or its timeout. */
+    fun hasPending(context: Context, notificationId: Int): Boolean = synchronized(lock) {
+        store(context).contains(KEY_PREFIX + notificationId)
+    }
+
+    /**
+     * Remembers that the timeout or a swipe logged this prompt, so a late ✏️ Edit tap can tell the
+     * user instead of opening a pre-filled editor that would save a duplicate. Kept for 1 day.
+     */
+    private fun markAutoAdded(context: Context, notificationId: Int) {
+        if (notificationId < 0) return
+        val now = System.currentTimeMillis()
+        synchronized(lock) {
+            val prefs = store(context)
+            val editor = prefs.edit().putLong(KEY_ADDED_PREFIX + notificationId, now)
+            for ((key, value) in prefs.all) {
+                if (key.startsWith(KEY_ADDED_PREFIX) && now - ((value as? Long) ?: 0L) > ADDED_TTL_MS) {
+                    editor.remove(key)
+                }
+            }
+            editor.commit()
+        }
+    }
+
+    /** True if the timeout or a swipe already logged this prompt (see [markAutoAdded]). */
+    fun wasAutoAdded(context: Context, notificationId: Int): Boolean = synchronized(lock) {
+        store(context).contains(KEY_ADDED_PREFIX + notificationId)
+    }
+
     fun scheduleAlarm(context: Context, notificationId: Int, dueAt: Long) {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = alarmPendingIntent(context, notificationId)
@@ -128,8 +159,9 @@ object UpiAutoConfirm {
         return PendingIntent.getBroadcast(context, notificationId * 10 + 5, intent, immutableFlags())
     }
 
-    /** Commits a pending record JSON into the approved queue. */
+    /** Commits a pending record JSON into the approved queue (timeout, swipe or reconcile). */
     fun enqueueFromPending(context: Context, pending: JSONObject, dispatchLive: Boolean = true) {
+        markAutoAdded(context, pending.optInt("notificationId", -1))
         enqueueApproved(
             context,
             amount = pending.optDouble("amount", 0.0),
@@ -182,6 +214,35 @@ object UpiAutoConfirm {
 
         if (dispatchLive) {
             MainActivity.dispatchUpiExpenseApproved(txnJson.toString())
+        }
+    }
+
+    /**
+     * Returns the approved queue without clearing it. Flutter removes entries with
+     * [removeFromApprovedQueue] only after they are saved, so a crash or a failed insert in
+     * Flutter cannot lose a payment.
+     */
+    fun readApprovedQueue(context: Context): String = synchronized(lock) {
+        context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_APPROVED_QUEUE, "[]") ?: "[]"
+    }
+
+    /** Removes saved transactions (by `id`) from the approved queue. Drops entries with no id. */
+    fun removeFromApprovedQueue(context: Context, ids: Collection<String>) {
+        synchronized(lock) {
+            val prefs = context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
+            val existing = try {
+                JSONArray(prefs.getString(KEY_APPROVED_QUEUE, "[]") ?: "[]")
+            } catch (_: Exception) {
+                JSONArray()
+            }
+            val kept = JSONArray()
+            for (i in 0 until existing.length()) {
+                val item = existing.optJSONObject(i) ?: continue
+                val id = item.optString("id", "")
+                if (id.isNotEmpty() && id !in ids) kept.put(item)
+            }
+            prefs.edit().putString(KEY_APPROVED_QUEUE, kept.toString()).commit()
         }
     }
 

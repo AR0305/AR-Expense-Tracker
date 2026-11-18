@@ -87,7 +87,7 @@ object BankSmsTracker {
                 category = UpiPrompt.inferCategory(parsed.payee, body),
                 timestamp = timestamp,
                 sourcePackage = "sms:${parsed.bankName}",
-                notificationId = UpiPrompt.nextNotificationId(),
+                notificationId = UpiPrompt.nextNotificationId(context),
                 sourceLabel = label,
                 note = note
             )

@@ -36,8 +36,8 @@ class UpiTrackingService {
           try {
             final json = jsonDecode(jsonStr);
             final txn = UpiTransaction.fromJson(json);
-            if (_dbRef != null) {
-              await _ingestOnce(_dbRef!, txn);
+            if (_dbRef != null && await _ingestOnce(_dbRef!, txn)) {
+              await _ack([txn.id]);
             }
           } catch (_) {}
         }
@@ -66,6 +66,35 @@ class UpiTrackingService {
     }
   }
 
+  /// Whether the phone lets bank SMS detection run while the app is closed. Autostart (Xiaomi,
+  /// Oppo, Vivo, ...) cannot be read by apps, so only its presence is reported.
+  static Future<BackgroundAccessStatus> getBackgroundAccess() async {
+    try {
+      final map = await _channel.invokeMapMethod<String, dynamic>('getBackgroundAccess');
+      return BackgroundAccessStatus(
+        batteryUnrestricted: map?['batteryUnrestricted'] as bool? ?? true,
+        hasAutostartSetting: map?['hasAutostartSetting'] as bool? ?? false,
+        manufacturer: map?['manufacturer'] as String? ?? '',
+      );
+    } catch (_) {
+      return const BackgroundAccessStatus(batteryUnrestricted: true, hasAutostartSetting: false, manufacturer: '');
+    }
+  }
+
+  /// Shows Android's "Allow app to always run in background?" dialog.
+  static Future<void> requestIgnoreBatteryOptimizations() async {
+    try {
+      await _channel.invokeMethod('requestIgnoreBatteryOptimizations');
+    } catch (_) {}
+  }
+
+  /// Opens the phone maker's Autostart screen (falls back to the app's settings page).
+  static Future<void> openAutostartSettings() async {
+    try {
+      await _channel.invokeMethod('openAutostartSettings');
+    } catch (_) {}
+  }
+
   /// Opens this app's Android settings page (for permanently denied permissions).
   static Future<void> openAppSettings() async {
     try {
@@ -73,36 +102,61 @@ class UpiTrackingService {
     } catch (_) {}
   }
 
-  /// Processes and logs any pending approved UPI transactions queued while the app was closed
+  /// Processes and logs any pending approved UPI transactions queued while the app was closed.
+  /// The native queue is only trimmed for transactions that were saved, so a failure (or the app
+  /// being killed mid-way) leaves the rest to be retried on the next start/resume.
   static Future<void> processPendingApprovedExpenses(ExpenseDatabase db) async {
+    String? queueStr;
     try {
-      final queueStr = await _channel.invokeMethod<String>('getPendingUpiExpenses');
-      if (queueStr == null || queueStr.isEmpty || queueStr == '[]') return;
+      queueStr = await _channel.invokeMethod<String>('getPendingUpiExpenses');
+    } catch (_) {
+      return;
+    }
+    if (queueStr == null || queueStr.isEmpty || queueStr == '[]') return;
 
-      final list = UpiTransaction.decodeList(queueStr);
-      for (final txn in list) {
-        await _ingestOnce(db, txn);
+    final saved = <String>[];
+    for (final txn in UpiTransaction.decodeList(queueStr)) {
+      try {
+        if (await _ingestOnce(db, txn)) saved.add(txn.id);
+      } catch (_) {
+        // Stays in the native queue; retried next time
       }
+    }
+    await _ack(saved);
+  }
+
+  /// Tells native these transactions are saved, so they leave the approved queue.
+  static Future<void> _ack(List<String> ids) async {
+    if (ids.isEmpty) return;
+    try {
+      await _channel.invokeMethod('ackUpiExpenses', ids);
     } catch (_) {}
   }
 
   /// Logs a transaction unless its id was already processed. Runs serially so a live event and a
-  /// queue drain racing each other cannot both insert the same transaction.
-  static Future<void> _ingestOnce(ExpenseDatabase db, UpiTransaction txn) {
+  /// queue drain racing each other cannot both insert the same transaction. Returns true once the
+  /// transaction is in the database (now or earlier); throws if saving failed.
+  static Future<bool> _ingestOnce(ExpenseDatabase db, UpiTransaction txn) {
     final next = _serial.then((_) async {
       final prefs = await SharedPreferences.getInstance();
       final seen = prefs.getStringList(_processedIdsKey) ?? <String>[];
-      if (seen.contains(txn.id)) return;
+      if (seen.contains(txn.id)) return true;
 
       await logUpiTransaction(db, txn);
 
+      // Record the id straight after the insert, before anything else can throw
       seen.add(txn.id);
       if (seen.length > _maxProcessedIds) {
         seen.removeRange(0, seen.length - _maxProcessedIds);
       }
       await prefs.setStringList(_processedIdsKey, seen);
+
+      try {
+        await NotificationService.onExpenseAdded(db);
+      } catch (_) {}
+      return true;
     });
-    _serial = next.catchError((_) {});
+    _serial = next.then<void>((_) {}, onError: (_) {});
     return next;
   }
 
@@ -131,41 +185,51 @@ class UpiTrackingService {
   /// Book id saved by HomeScreen every time a book is opened.
   static const String lastOpenedGroupKey = 'last_opened_group_id';
 
-  static Future<ExpenseGroup?> resolveTargetBook(
+  /// With no books at all, the payment month's book is created so the payment is never dropped.
+  static Future<ExpenseGroup> resolveTargetBook(
     ExpenseDatabase db,
     SharedPreferences prefs,
     DateTime paymentDate,
   ) async {
     final groups = await db.fetchGroups();
-    if (groups.isEmpty) return null;
 
     ExpenseGroup? byId(Object? id) =>
         id == null ? null : groups.where((g) => g.id.toString() == id.toString()).firstOrNull;
 
     final target = prefs.getString(targetBookKey);
-    if (target == targetMonthBook) {
-      final monthName = DateFormat('MMMM yyyy').format(paymentDate);
-      final existing = groups.where((g) => g.name == monthName).firstOrNull;
-      if (existing != null) return existing;
-      final newId = await db.into(db.expenseGroups).insert(
-            ExpenseGroupsCompanion.insert(
-              name: monthName,
-              icon: const Value('folder_rounded'),
-              isMonthlyBudget: const Value(true),
-              createdAt: DateTime(paymentDate.year, paymentDate.month),
-            ),
-          );
-      return (await db.fetchGroups()).where((g) => g.id == newId).firstOrNull ?? groups.first;
+    if (target == targetMonthBook || groups.isEmpty) {
+      return _monthBook(db, groups, paymentDate);
     }
 
     return byId(target) ?? byId(prefs.getInt(lastOpenedGroupKey)) ?? groups.first;
   }
 
-  /// Directly saves an approved UPI transaction into the configured destination book
+  /// The book named after [paymentDate]'s month ("November 2026"), created if missing.
+  static Future<ExpenseGroup> _monthBook(
+    ExpenseDatabase db,
+    List<ExpenseGroup> groups,
+    DateTime paymentDate,
+  ) async {
+    final monthName = DateFormat('MMMM yyyy').format(paymentDate);
+    final existing = groups.where((g) => g.name == monthName).firstOrNull;
+    if (existing != null) return existing;
+    final newId = await db.into(db.expenseGroups).insert(
+          ExpenseGroupsCompanion.insert(
+            name: monthName,
+            icon: const Value('folder_rounded'),
+            isMonthlyBudget: const Value(true),
+            createdAt: DateTime(paymentDate.year, paymentDate.month),
+          ),
+        );
+    final created = (await db.fetchGroups()).where((g) => g.id == newId).firstOrNull;
+    if (created == null) throw StateError('Could not create book "$monthName"');
+    return created;
+  }
+
+  /// Saves an approved UPI transaction into the configured destination book. Throws on failure.
   static Future<void> logUpiTransaction(ExpenseDatabase db, UpiTransaction txn) async {
     final prefs = await SharedPreferences.getInstance();
     final targetGroup = await resolveTargetBook(db, prefs, txn.dateTime);
-    if (targetGroup == null) return;
 
     await db.addExpense(
       ExpensesCompanion.insert(
@@ -181,7 +245,18 @@ class UpiTrackingService {
         subExpenses: const Value([]),
       ),
     );
-
-    await NotificationService.onExpenseAdded(db);
   }
+}
+
+/// See [UpiTrackingService.getBackgroundAccess].
+class BackgroundAccessStatus {
+  final bool batteryUnrestricted;
+  final bool hasAutostartSetting;
+  final String manufacturer;
+
+  const BackgroundAccessStatus({
+    required this.batteryUnrestricted,
+    required this.hasAutostartSetting,
+    required this.manufacturer,
+  });
 }

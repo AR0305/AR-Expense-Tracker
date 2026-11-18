@@ -11,4 +11,12 @@
     <color name="widget_text_tertiary">#8C9099</color>
     <color name="widget_progress_track">#2D3035</color>
     <color name="widget_primary_default">#10B981</color>
+
+    <!-- Raised widget tiles (fallback before Android 12; tinted from the app theme after) -->
+    <color name="widget_pro_edge">#2A2E34</color>
+    <color name="widget_pro_surface">#17191D</color>
+    <color name="widget_pro_tile">#202328</color>
+    <color name="widget_pro_tile_edge">#2E3238</color>
+    <color name="widget_pro_track">#2E3238</color>
+    <color name="widget_pro_red">#E5484D</color>
 </resources>

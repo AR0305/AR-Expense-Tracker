@@ -43,16 +43,26 @@ class UpiTransaction {
         note: json['note'] as String? ?? '',
       );
 
+  /// Decodes the native approved queue. Skips bad entries one by one, and entries without an `id`
+  /// (they could not be de-duplicated or removed from the queue, so they would repeat).
   static List<UpiTransaction> decodeList(String jsonString) {
     if (jsonString.isEmpty || jsonString == '[]') return [];
+    final List<dynamic> decoded;
     try {
-      final List<dynamic> decoded = jsonDecode(jsonString);
-      return decoded
-          .map((item) => UpiTransaction.fromJson(item as Map<String, dynamic>))
-          .toList();
+      decoded = jsonDecode(jsonString) as List<dynamic>;
     } catch (_) {
       return [];
     }
+    final result = <UpiTransaction>[];
+    for (final item in decoded) {
+      try {
+        final map = item as Map<String, dynamic>;
+        final id = map['id'];
+        if (id is! String || id.isEmpty) continue;
+        result.add(UpiTransaction.fromJson(map));
+      } catch (_) {}
+    }
+    return result;
   }
 
   static String encodeList(List<UpiTransaction> list) {

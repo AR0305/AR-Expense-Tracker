@@ -8,8 +8,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * "Detected payment" prompt (✓ Yes / ✕ No / ✏️ Edit + auto-confirm) and de-duplication for
@@ -38,10 +39,28 @@ object UpiPrompt {
         val note: String? = null
     )
 
-    private val idCounter = AtomicInteger((System.currentTimeMillis() % 50000).toInt())
+    private const val ID_STORE = "upi_prompt_state"
+    private const val KEY_ID_SEQ = "notif_seq"
+    private const val ID_RANGE = 100000
+    private val idLock = Any()
 
-    /** Unique notification id in 2000..101999 (also keys the auto-confirm pending record). */
-    fun nextNotificationId(): Int = 2000 + (idCounter.incrementAndGet() and 0x7fffffff) % 100000
+    /**
+     * Notification id in 2000..101999 (also keys the auto-confirm pending record). The counter is
+     * saved, so ids stay unique across the short-lived processes SMS broadcasts run in, and an id
+     * that still has a pending prompt is skipped.
+     */
+    fun nextNotificationId(context: Context): Int = synchronized(idLock) {
+        val prefs = context.getSharedPreferences(ID_STORE, Context.MODE_PRIVATE)
+        var seq = prefs.getInt(KEY_ID_SEQ, (System.currentTimeMillis() % ID_RANGE).toInt())
+        var id: Int
+        var tries = 0
+        do {
+            seq = (seq + 1) % ID_RANGE
+            id = 2000 + seq
+        } while (UpiAutoConfirm.hasPending(context, id) && ++tries < 100)
+        prefs.edit().putInt(KEY_ID_SEQ, seq).commit()
+        id
+    }
 
     // ---------------------------------------------------------------- de-duplication
 
@@ -131,9 +150,15 @@ object UpiPrompt {
             nm.createNotificationChannel(channel)
         }
 
-        // Auto-confirm: no response within the configured minutes (or a swipe away) logs it
+        // Auto-confirm: no response within the configured minutes (or a swipe away) logs it.
+        // Only when the prompt can actually be seen: with notifications or this channel blocked
+        // the user could never answer No, so nothing is logged without their say.
         val autoMinutes = UpiAutoConfirm.getDelayMinutes(context)
-        val autoConfirm = autoMinutes > 0
+        val promptVisible = canShowPrompt(context, nm)
+        if (!promptVisible) {
+            Log.w("UpiPrompt", "Notifications blocked: payment prompt hidden, auto-confirm skipped")
+        }
+        val autoConfirm = autoMinutes > 0 && promptVisible
 
         // Action 1: "Yes" (Broadcast to UpiActionReceiver)
         val yesIntent = Intent(context, UpiActionReceiver::class.java).apply {
@@ -232,6 +257,16 @@ object UpiPrompt {
         }
 
         nm.notify(txn.notificationId, builder.build())
+    }
+
+    /** False when app notifications (POST_NOTIFICATIONS) or the Payment Alerts channel are off. */
+    private fun canShowPrompt(context: Context, nm: NotificationManager): Boolean {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = nm.getNotificationChannel(CHANNEL_ID)
+            if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) return false
+        }
+        return true
     }
 
     private fun immutableFlags(): Int =

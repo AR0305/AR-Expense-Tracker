@@ -52,6 +52,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
   int _upiAutoConfirmMinutes = UpiTrackingService.defaultAutoConfirmMinutes;
   bool _bankSmsEnabled = true;
   bool _isSmsPermissionGranted = false;
+  BackgroundAccessStatus? _backgroundAccess;
 
   @override
   void initState() {
@@ -78,10 +79,73 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
 
   Future<void> _refreshSmsPermission() async {
     final smsGranted = await UpiTrackingService.isSmsPermissionGranted();
+    final backgroundAccess = await UpiTrackingService.getBackgroundAccess();
     if (!mounted) return;
     setState(() {
       _isSmsPermissionGranted = smsGranted;
+      _backgroundAccess = backgroundAccess;
     });
+  }
+
+  // ---------------------------------------------------------------- Background access
+
+  String get _backgroundAccessSubtitle {
+    final access = _backgroundAccess;
+    if (access == null) return 'Checking...';
+    if (!access.batteryUnrestricted) {
+      return 'Restricted: payments are only detected when you open the app. Tap to fix.';
+    }
+    if (access.hasAutostartSetting) {
+      return 'Battery unrestricted. Also keep Autostart on, or payments wait until you open the app.';
+    }
+    return 'Allowed. Payments are detected while the app is closed.';
+  }
+
+  /// Explains and opens the two phone settings that let bank SMS detection (and auto-confirm)
+  /// run while the app is closed.
+  Future<void> _showBackgroundAccessDialog() async {
+    final access = _backgroundAccess ?? await UpiTrackingService.getBackgroundAccess();
+    if (!mounted) return;
+    final brand = access.manufacturer.isEmpty
+        ? 'your phone'
+        : '${access.manufacturer[0].toUpperCase()}${access.manufacturer.substring(1)} phones';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Detect payments while closed'),
+        content: Text(
+          'Bank SMS can only be detected while the app is closed if your phone allows it. '
+          'Otherwise payment alerts, and auto-confirm, only appear when you open the app.\n\n'
+          '1. Battery: allow the app to run in the background'
+          '${access.batteryUnrestricted ? ' (already allowed)' : ''}.'
+          '${access.hasAutostartSetting ? '\n2. Autostart: on $brand, turn on Autostart for AR Expense Tracker. '
+              'Also set Battery saver to "No restrictions" in the app\'s settings.' : ''}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+          if (access.hasAutostartSetting)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                UpiTrackingService.openAutostartSettings();
+              },
+              child: const Text('Open Autostart'),
+            ),
+          if (!access.batteryUnrestricted)
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                UpiTrackingService.requestIgnoreBatteryOptimizations();
+              },
+              child: const Text('Allow Battery'),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadUpiSettings() async {
@@ -121,6 +185,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
     final granted = await UpiTrackingService.requestSmsPermission();
     if (!mounted) return;
     setState(() => _isSmsPermissionGranted = granted);
+    if (granted) {
+      // Without background access, SMS is only read when the app is opened
+      final access = await UpiTrackingService.getBackgroundAccess();
+      if (!mounted) return;
+      setState(() => _backgroundAccess = access);
+      if (!access.batteryUnrestricted || access.hasAutostartSetting) {
+        await _showBackgroundAccessDialog();
+      }
+      return;
+    }
     if (!granted) {
       showDialog(
         context: context,
@@ -1157,6 +1231,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
                 ),
               ),
               if (_bankSmsEnabled) ...[
+                if (_isSmsPermissionGranted)
+                  SettingsItem(
+                    title: 'Background Access',
+                    subtitle: _backgroundAccessSubtitle,
+                    icon: _backgroundAccess != null && !_backgroundAccess!.batteryUnrestricted
+                        ? Icons.warning_amber_rounded
+                        : Icons.battery_charging_full_rounded,
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _showBackgroundAccessDialog,
+                  ),
                 SettingsItem(
                   title: 'Save Payments To',
                   subtitle: 'Book that confirmed payments are added to',

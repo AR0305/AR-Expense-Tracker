@@ -41,6 +41,10 @@ class HomeScreen extends ConsumerStatefulWidget {
   final String? initialAddExpenseCategory;
   final String? initialAddExpenseNote;
 
+  /// Opened from ✏️ Edit on a detected-payment prompt. The prompt is gone by then, so closing the
+  /// editor without saving asks before the payment is dropped.
+  final bool fromPaymentPrompt;
+
   const HomeScreen({
     super.key,
     required this.group,
@@ -50,6 +54,7 @@ class HomeScreen extends ConsumerStatefulWidget {
     this.initialAddExpenseTitle,
     this.initialAddExpenseCategory,
     this.initialAddExpenseNote,
+    this.fromPaymentPrompt = false,
   });
 
   @override
@@ -91,21 +96,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _checkAutoOpen() {
     if (widget.autoOpenAddExpense) {
       Future.delayed(const Duration(milliseconds: 350), () {
-        if (mounted) {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            useSafeArea: true,
-            backgroundColor: Colors.transparent,
-            builder: (ctx) => AddExpenseScreen(
-              group: widget.group,
-              initialAmount: widget.initialAddExpenseAmount,
-              initialTitle: widget.initialAddExpenseTitle,
-              initialCategory: widget.initialAddExpenseCategory,
-              initialNote: widget.initialAddExpenseNote,
-            ),
-          );
-        }
+        if (mounted) _openAutoAddExpense();
       });
     } else if (widget.autoOpenInsights) {
       Future.delayed(const Duration(milliseconds: 350), () {
@@ -118,6 +109,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         }
       });
+    }
+  }
+
+  /// Opens the pre-filled Add Expense sheet. For a detected payment (✏️ Edit), closing the sheet
+  /// without saving asks whether to discard it, since nothing else would still hold the payment.
+  Future<void> _openAutoAddExpense() async {
+    while (true) {
+      if (!mounted) return;
+      final saved = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => AddExpenseScreen(
+          group: widget.group,
+          initialAmount: widget.initialAddExpenseAmount,
+          initialTitle: widget.initialAddExpenseTitle,
+          initialCategory: widget.initialAddExpenseCategory,
+          initialNote: widget.initialAddExpenseNote,
+        ),
+      );
+      if (!mounted) return;
+      if (saved == true || !widget.fromPaymentPrompt) return;
+
+      final amount = widget.initialAddExpenseAmount ?? 0;
+      final amountText = amount % 1 == 0 ? amount.toInt().toString() : amount.toStringAsFixed(2);
+      final payee = widget.initialAddExpenseTitle;
+      final keepEditing = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Payment not saved'),
+          content: Text(
+            '₹$amountText${payee != null && payee.isNotEmpty ? ' to $payee' : ''} has not been '
+            'logged. Discard it?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Discard')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Keep editing')),
+          ],
+        ),
+      );
+      if (keepEditing != true) return;
     }
   }
 
@@ -176,6 +210,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final appSeedColor = ref.read(appColorProvider);
     // ignore: deprecated_member_use
     await HomeWidget.saveWidgetData<int>('primary_color', appSeedColor.value);
+    await saveWidgetTheme(ref.read(themeProvider), ref.read(isAmoledProvider));
 
     // Group Name & Title
     await HomeWidget.saveWidgetData<String>(
@@ -279,7 +314,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     ref.listen(expenseMetricsProvider(activeGroup), (previous, next) {
       if (previous?.total != next.total) {
-        _updateHomeWidget(activeGroup, next, allExpenses);
+        // Read the list now: `allExpenses` above belongs to the previous build, so on first load
+        // it is still empty and the widget would show 0 txns and no latest expense.
+        final current = ref
+            .read(expenseProvider(activeGroup))
+            .where((e) => !_pendingDeletes.contains(e.id))
+            .toList();
+        _updateHomeWidget(activeGroup, next, current);
       }
     });
 

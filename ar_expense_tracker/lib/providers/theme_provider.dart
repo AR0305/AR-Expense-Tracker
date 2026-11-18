@@ -8,6 +8,22 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('sharedPreferencesProvider was not initialized');
 });
 
+/// Hands the app's theme to the home-screen widget: `theme_mode` is the [ThemeMode] index
+/// (0 system, 1 light, 2 dark) and `is_amoled` the pure-black dark variant.
+Future<void> saveWidgetTheme(ThemeMode mode, bool amoled) async {
+  try {
+    await HomeWidget.saveWidgetData<int>('theme_mode', mode.index);
+    await HomeWidget.saveWidgetData<bool>('is_amoled', amoled);
+  } catch (_) {}
+}
+
+Future<void> _refreshWidgetTheme(ThemeMode mode, bool amoled) async {
+  await saveWidgetTheme(mode, amoled);
+  try {
+    await HomeWidget.updateWidget(androidName: 'AddExpenseWidgetProvider');
+  } catch (_) {}
+}
+
 class ThemeNotifier extends Notifier<ThemeMode> {
   @override
   ThemeMode build() {
@@ -23,12 +39,14 @@ class ThemeNotifier extends Notifier<ThemeMode> {
     final nextMode = state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
     state = nextMode;
     prefs.setInt('theme_mode', state.index);
+    _refreshWidgetTheme(state, ref.read(isAmoledProvider));
   }
 
   void setTheme(ThemeMode mode) {
     final prefs = ref.read(sharedPreferencesProvider);
     state = mode;
     prefs.setInt('theme_mode', mode.index);
+    _refreshWidgetTheme(mode, ref.read(isAmoledProvider));
   }
 }
 
@@ -120,6 +138,7 @@ class AmoledNotifier extends Notifier<bool> {
     final prefs = ref.read(sharedPreferencesProvider);
     state = value;
     prefs.setBool('app_is_amoled', value);
+    _refreshWidgetTheme(ref.read(themeProvider), value);
   }
 }
 

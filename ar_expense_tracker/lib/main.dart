@@ -135,6 +135,8 @@ class _MainAppState extends ConsumerState<MainApp> with WidgetsBindingObserver {
     final String? upiTitle = isUpiEdit ? uri.queryParameters['title'] : null;
     final String? upiCategory = isUpiEdit ? uri.queryParameters['category'] : null;
     final String? upiNote = isUpiEdit ? uri.queryParameters['note'] : null;
+    // Set natively when the auto-confirm timeout logged the payment just before ✏️ Edit was tapped
+    final upiAlreadyAdded = isUpiEdit && uri.queryParameters['alreadyAdded'] == '1';
 
     // Wait until navigator is mounted and context is ready
     int attempts = 0;
@@ -169,15 +171,31 @@ class _MainAppState extends ConsumerState<MainApp> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => HomeScreen(
           group: targetGroup,
-          autoOpenAddExpense: isAddExpense,
+          // Already logged: don't open an editor that would save it a second time
+          autoOpenAddExpense: isAddExpense && !upiAlreadyAdded,
           autoOpenInsights: isInsights,
           initialAddExpenseAmount: upiAmount,
           initialAddExpenseTitle: upiTitle,
           initialAddExpenseCategory: upiCategory,
           initialAddExpenseNote: upiNote,
+          fromPaymentPrompt: isUpiEdit,
         ),
       ),
     );
+
+    if (upiAlreadyAdded) {
+      final amount = upiAmount ?? 0;
+      final amountText = amount % 1 == 0 ? amount.toInt().toString() : amount.toStringAsFixed(2);
+      final payee = upiTitle != null && upiTitle.isNotEmpty ? ' to $upiTitle' : '';
+      final ctx = navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(
+        SnackBar(
+          content: Text('₹$amountText$payee was already auto-added. Edit it from the book it was saved to.'),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
   }
 
   @override

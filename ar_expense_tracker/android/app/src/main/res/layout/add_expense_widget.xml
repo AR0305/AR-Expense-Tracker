@@ -1,329 +1,346 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Raised, theme-matched widget. Every tile is an "edge" view (outline plus a 3dp bottom lip)
+    holding an inset "face" view, so the two can be tinted separately. AddExpenseWidgetProvider
+    tones both from the app's seed colour and theme mode (system / light / dark / AMOLED) on
+    Android 12+; older versions use the neutral colours in values / values-night.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent"
-    android:padding="0dp">
+    android:background="@drawable/widget_pro_root_edge">
 
     <LinearLayout
-        android:id="@+id/widget_root"
+        android:id="@+id/widget_root_face"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginStart="1dp"
+        android:layout_marginEnd="1dp"
+        android:layout_marginTop="1dp"
+        android:layout_marginBottom="3dp"
         android:orientation="vertical"
-        android:background="@drawable/widget_bg_m3"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
+        android:background="@drawable/widget_pro_root_face"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
         android:paddingTop="10dp"
-        android:paddingBottom="10dp"
-        android:clipToOutline="true">
+        android:paddingBottom="10dp">
 
-        <!-- 1. Header Bar: Book Badge on Left, Accessible Quick Add FAB on Right -->
+        <!-- 1. Header: book chip (opens the book) and daily average chip (opens Insights) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <!-- Active Book Pill -->
-            <LinearLayout
-                android:id="@+id/widget_book_chip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="@drawable/widget_pill_m3"
-                android:paddingStart="10dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="5dp"
-                android:paddingBottom="5dp">
-
-                <ImageView
-                    android:id="@+id/widget_book_icon"
-                    android:layout_width="15dp"
-                    android:layout_height="15dp"
-                    android:layout_marginEnd="6dp"
-                    android:src="@drawable/ic_wallet_m3"
-                    android:contentDescription="Book" />
-
-                <TextView
-                    android:id="@+id/widget_group_name"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Expense Tracker"
-                    android:textColor="@color/widget_text_primary"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
-            </LinearLayout>
-
             <FrameLayout
+                android:id="@+id/widget_book_chip"
                 android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-            <!-- Daily Average Pill (Tapping opens Insights) -->
-            <LinearLayout
-                android:id="@+id/widget_daily_avg_chip"
-                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="@drawable/widget_pill_m3"
-                android:paddingStart="10dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="5dp"
-                android:paddingBottom="5dp"
-                android:contentDescription="Daily Average">
-
-                <ImageView
-                    android:id="@+id/widget_daily_avg_icon"
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
-                    android:layout_marginEnd="6dp"
-                    android:src="@drawable/ic_trending_m3"
-                    android:contentDescription="Insights" />
-
-                <TextView
-                    android:id="@+id/widget_daily_avg"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Avg: ₹0"
-                    android:textColor="@color/widget_text_primary"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:maxLines="1" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- 2. Hero Expenditure & Budget Tracking -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="3dp"
-            android:layout_marginBottom="5dp">
-
-            <TextView
-                android:id="@+id/widget_amount"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="₹0.00"
-                android:textColor="@color/widget_text_primary"
-                android:textSize="32sp"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:autoSizeTextType="uniform"
-                android:autoSizeMinTextSize="20sp"
-                android:autoSizeMaxTextSize="36sp" />
-
-            <!-- Budget Progress Bar (Visible when budget configured) -->
-            <ProgressBar
-                android:id="@+id/widget_budget_progress"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="5dp"
-                android:minHeight="5dp"
-                android:maxHeight="5dp"
-                android:layout_marginTop="4dp"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_progress_track"
-                android:visibility="gone" />
-
-            <!-- Budget Status & Transactions Row -->
-            <LinearLayout
-                android:id="@+id/widget_budget_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="3dp">
-
-                <TextView
-                    android:id="@+id/widget_budget_status"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text=""
-                    android:textColor="@color/widget_text_secondary"
-                    android:textSize="11sp"
-                    android:fontFamily="sans-serif"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
-
-                <!-- Transaction Count Pill Badge -->
-                <LinearLayout
-                    android:id="@+id/widget_tx_chip"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@drawable/widget_pill_m3"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingTop="3dp"
-                    android:paddingBottom="3dp"
-                    android:layout_marginStart="6dp">
-
-                    <TextView
-                        android:id="@+id/widget_tx_count"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="0 txns"
-                        android:textColor="@color/widget_text_secondary"
-                        android:textSize="10sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:maxLines="1" />
-                </LinearLayout>
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- 3. Bottom Row: Recent Activity (Expanded Left) & Thumb Quick Add FAB (Right Corner) -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:baselineAligned="false">
-
-            <!-- Card: Recent Activity (Tapping opens Book) -->
-            <LinearLayout
-                android:id="@+id/widget_bottom_right_card"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="10dp"
-                android:background="@drawable/widget_card_m3"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="5dp"
-                android:paddingBottom="5dp"
-                android:orientation="vertical"
-                android:gravity="center_vertical">
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/widget_pro_chip_edge">
 
                 <LinearLayout
+                    android:id="@+id/widget_book_face"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="1dp"
+                    android:layout_marginEnd="1dp"
+                    android:layout_marginTop="1dp"
+                    android:layout_marginBottom="2dp"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="2dp">
+                    android:background="@drawable/widget_pro_chip_face"
+                    android:paddingStart="9dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
 
                     <ImageView
-                        android:id="@+id/widget_recent_icon"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
-                        android:layout_marginEnd="5dp"
-                        android:src="@drawable/ic_clock_m3"
-                        android:contentDescription="Recent" />
+                        android:id="@+id/widget_book_icon"
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:layout_marginEnd="7dp"
+                        android:src="@drawable/ic_pro_book"
+                        android:contentDescription="Book" />
 
                     <TextView
+                        android:id="@+id/widget_group_name"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="RECENT"
-                        android:textColor="@color/widget_text_secondary"
-                        android:textSize="10sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05" />
-
-                    <FrameLayout
-                        android:layout_width="0dp"
-                        android:layout_height="0dp"
-                        android:layout_weight="1" />
-
-                    <TextView
-                        android:id="@+id/widget_last_expense_date"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text=""
-                        android:textColor="@color/widget_text_tertiary"
-                        android:textSize="10sp"
-                        android:fontFamily="sans-serif"
-                        android:maxLines="1" />
-                </LinearLayout>
-
-                <!-- Row for Name and Amount -->
-                <LinearLayout
-                    android:id="@+id/widget_last_expense_container"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:id="@+id/widget_last_expense_name"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text=""
+                        android:text="Expense Tracker"
                         android:textColor="@color/widget_text_primary"
                         android:textSize="13sp"
                         android:fontFamily="sans-serif-medium"
                         android:includeFontPadding="false"
                         android:maxLines="1"
                         android:ellipsize="end" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/widget_daily_avg_chip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/widget_pro_chip_edge"
+                android:contentDescription="Daily average">
+
+                <LinearLayout
+                    android:id="@+id/widget_avg_face"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="1dp"
+                    android:layout_marginEnd="1dp"
+                    android:layout_marginTop="1dp"
+                    android:layout_marginBottom="2dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/widget_pro_chip_face"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <ImageView
+                        android:id="@+id/widget_daily_avg_icon"
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:layout_marginEnd="5dp"
+                        android:src="@drawable/ic_pro_trending"
+                        android:contentDescription="Insights" />
 
                     <TextView
-                        android:id="@+id/widget_last_expense_amount"
+                        android:id="@+id/widget_daily_avg"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text=""
+                        android:text="₹0/day"
                         android:textColor="@color/widget_text_primary"
                         android:textSize="13sp"
                         android:fontFamily="sans-serif-medium"
                         android:includeFontPadding="false"
                         android:maxLines="1" />
                 </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
 
-                <!-- Fallback when no expenses recorded -->
-                <TextView
-                    android:id="@+id/widget_last_expense_empty"
+        <!-- 2. Total spent: takes the spare height and shrinks first when the widget is short -->
+        <TextView
+            android:id="@+id/widget_amount"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical|start"
+            android:text="₹0"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="30sp"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="16sp"
+            android:autoSizeMaxTextSize="32sp"
+            android:autoSizeStepGranularity="1sp" />
+
+        <ProgressBar
+            android:id="@+id/widget_budget_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:minHeight="8dp"
+            android:maxHeight="8dp"
+            android:layout_marginTop="4dp"
+            android:max="100"
+            android:progress="0"
+            android:progressDrawable="@drawable/widget_pro_progress"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/widget_budget_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/widget_budget_status"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text=""
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_tx_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="0 txns"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif"
+                android:includeFontPadding="false"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <!-- 3. Latest expense card (opens the book) and the raised quick-add button -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="bottom"
+            android:baselineAligned="false">
+
+            <FrameLayout
+                android:id="@+id/widget_bottom_right_card"
+                android:layout_width="0dp"
+                android:layout_height="51dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/widget_pro_card_edge">
+
+                <LinearLayout
+                    android:id="@+id/widget_card_face"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="No expenses yet"
-                    android:textColor="@color/widget_text_tertiary"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif"
-                    android:visibility="gone" />
-            </LinearLayout>
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="1dp"
+                    android:layout_marginEnd="1dp"
+                    android:layout_marginTop="1dp"
+                    android:layout_marginBottom="3dp"
+                    android:orientation="vertical"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/widget_pro_card_face"
+                    android:paddingStart="11dp"
+                    android:paddingEnd="11dp">
 
-            <!-- Thumb Quick Add Action Button (Right Corner: 48x48dp) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:id="@+id/widget_recent_icon"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginEnd="5dp"
+                            android:src="@drawable/ic_pro_clock"
+                            android:contentDescription="Latest" />
+
+                        <TextView
+                            android:id="@+id/widget_latest_label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Latest"
+                            android:textColor="@color/widget_text_secondary"
+                            android:textSize="11sp"
+                            android:fontFamily="sans-serif-medium"
+                            android:includeFontPadding="false" />
+
+                        <FrameLayout
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
+                        <TextView
+                            android:id="@+id/widget_last_expense_date"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:textColor="@color/widget_text_secondary"
+                            android:textSize="11sp"
+                            android:fontFamily="sans-serif"
+                            android:includeFontPadding="false"
+                            android:maxLines="1" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/widget_last_expense_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/widget_last_expense_name"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text=""
+                            android:textColor="@color/widget_text_primary"
+                            android:textSize="14sp"
+                            android:fontFamily="sans-serif-medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                        <TextView
+                            android:id="@+id/widget_last_expense_amount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text=""
+                            android:textColor="@color/widget_text_primary"
+                            android:textSize="14sp"
+                            android:fontFamily="sans-serif-medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/widget_last_expense_empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="No expenses yet"
+                        android:textColor="@color/widget_text_secondary"
+                        android:textSize="13sp"
+                        android:fontFamily="sans-serif"
+                        android:includeFontPadding="false"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- Raised add button: accent face over a darker 3dp lip; the frame is the tap target -->
             <FrameLayout
                 android:id="@+id/widget_add_button"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_gravity="center_vertical"
+                android:layout_width="51dp"
+                android:layout_height="51dp"
                 android:contentDescription="Quick add expense">
 
-                <!-- Fallback Circle FAB -->
-                <FrameLayout
-                    android:id="@+id/widget_fallback_fab"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:layout_gravity="center"
-                    android:background="@drawable/widget_pill_m3">
-
-                    <ImageView
-                        android:id="@+id/widget_fallback_icon"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_add"
-                        android:contentDescription="Add Expense" />
-                </FrameLayout>
-
-                <!-- Dynamic Bitmap Shape FAB -->
                 <ImageView
-                    android:id="@+id/widget_bitmap_fab"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:layout_gravity="center"
-                    android:scaleType="fitCenter"
-                    android:visibility="gone"
-                    android:contentDescription="Add Expense" />
+                    android:id="@+id/widget_add_lip"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:src="@drawable/widget_pro_button_shape"
+                    android:importantForAccessibility="no" />
+
+                <ImageView
+                    android:id="@+id/widget_add_face"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="top|center_horizontal"
+                    android:src="@drawable/widget_pro_button_shape"
+                    android:importantForAccessibility="no" />
+
+                <ImageView
+                    android:id="@+id/widget_add_icon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="top|center_horizontal"
+                    android:layout_marginTop="12dp"
+                    android:src="@drawable/ic_pro_plus"
+                    android:contentDescription="Add expense" />
             </FrameLayout>
         </LinearLayout>
     </LinearLayout>

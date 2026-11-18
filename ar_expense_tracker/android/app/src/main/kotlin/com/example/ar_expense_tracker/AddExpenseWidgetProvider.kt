@@ -58,20 +58,20 @@ class AddExpenseWidgetProvider : HomeWidgetProvider() {
                     // 2. Hero Amount
                     setTextViewText(R.id.widget_amount, amount)
 
-                    // 3. Budget Status & Progress Bar
+                    // 3. Budget Status & Progress Bar (red when over budget)
+                    val overBudget = hasBudget && budgetStatus.startsWith("Over")
                     if (hasBudget && budgetStatus.isNotEmpty()) {
                         setViewVisibility(R.id.widget_budget_progress, View.VISIBLE)
                         setProgressBar(R.id.widget_budget_progress, 100, budgetPercent.coerceIn(0, 100), false)
                         setTextViewText(R.id.widget_budget_status, budgetStatus)
-                        setViewVisibility(R.id.widget_budget_status, View.VISIBLE)
                     } else {
                         setViewVisibility(R.id.widget_budget_progress, View.GONE)
                         setTextViewText(R.id.widget_budget_status, "Total spent")
-                        setViewVisibility(R.id.widget_budget_status, View.VISIBLE)
                     }
+                    setViewVisibility(R.id.widget_budget_status, View.VISIBLE)
 
                     // 4. Daily Average
-                    val dailyAvgDisplay = if (dailyAvg.startsWith("₹")) "Avg: $dailyAvg" else "Avg: ₹$dailyAvg"
+                    val dailyAvgDisplay = (if (dailyAvg.startsWith("₹")) dailyAvg else "₹$dailyAvg") + "/day"
                     setTextViewText(R.id.widget_daily_avg, dailyAvgDisplay)
 
                     // 5. Recent Expense
@@ -98,80 +98,85 @@ class AddExpenseWidgetProvider : HomeWidgetProvider() {
                         setViewVisibility(R.id.widget_last_expense_empty, View.VISIBLE)
                     }
 
-                    // 6. Dynamic Material You Tonal Theme Blending
-                    val isDarkTheme = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                    // 6. Theme: every surface, text and icon is toned from the app's seed colour and
+                    // follows the app's theme setting (system / light / dark, plus AMOLED black).
+                    val themeMode = readInt(widgetData, "theme_mode", 0) // ThemeMode index: 0 system, 1 light, 2 dark
+                    val amoled = widgetData.getBoolean("is_amoled", false)
+                    val lightTheme = WidgetTheme.from(primaryColor, dark = false, amoled = false)
+                    val darkTheme = WidgetTheme.from(primaryColor, dark = true, amoled = amoled)
+                    val (day, night) = when (themeMode) {
+                        1 -> lightTheme to lightTheme
+                        2 -> darkTheme to darkTheme
+                        else -> lightTheme to darkTheme
+                    }
+                    val red = context.getColor(R.color.widget_pro_red)
+
+                    // Raised add button: accent face over a darker lip (same in both themes)
                     val isLightPrimary = ColorUtils.calculateLuminance(primaryColor) > 0.5
-                    val primaryButtonTextColor = if (isLightPrimary) Color.BLACK else Color.WHITE
-
-                    val baseSurfaceColor = if (isDarkTheme) Color.parseColor("#121316") else Color.parseColor("#F4F5F9")
-                    val baseCardColor = if (isDarkTheme) Color.parseColor("#1A1C1F") else Color.parseColor("#FFFFFF")
-                    val basePillColor = if (isDarkTheme) Color.parseColor("#24262A") else Color.parseColor("#E8EAF0")
-
-                    val rootBgTint = ColorUtils.blendARGB(baseSurfaceColor, primaryColor, if (isDarkTheme) 0.10f else 0.06f)
-                    val cardBgTint = ColorUtils.blendARGB(baseCardColor, primaryColor, if (isDarkTheme) 0.16f else 0.10f)
-                    val pillBgTint = ColorUtils.blendARGB(basePillColor, primaryColor, if (isDarkTheme) 0.22f else 0.12f)
-                    val iconTint = ColorUtils.blendARGB(if (isDarkTheme) Color.WHITE else Color.BLACK, primaryColor, 0.45f)
+                    setInt(R.id.widget_add_face, "setColorFilter", primaryColor)
+                    setInt(R.id.widget_add_lip, "setColorFilter", ColorUtils.blendARGB(primaryColor, Color.BLACK, 0.30f))
+                    setInt(R.id.widget_add_icon, "setColorFilter", if (isLightPrimary) Color.BLACK else Color.WHITE)
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        // Tint container backgrounds
-                        setColorStateList(R.id.widget_root, "setBackgroundTintList", ColorStateList.valueOf(rootBgTint))
-                        setColorStateList(R.id.widget_book_chip, "setBackgroundTintList", ColorStateList.valueOf(pillBgTint))
-                        setColorStateList(R.id.widget_daily_avg_chip, "setBackgroundTintList", ColorStateList.valueOf(pillBgTint))
-                        setColorStateList(R.id.widget_tx_chip, "setBackgroundTintList", ColorStateList.valueOf(pillBgTint))
-                        setColorStateList(R.id.widget_bottom_right_card, "setBackgroundTintList", ColorStateList.valueOf(pillBgTint))
-                        
-                        // Tint icons
-                        setColorStateList(R.id.widget_book_icon, "setImageTintList", ColorStateList.valueOf(iconTint))
-                        setColorStateList(R.id.widget_daily_avg_icon, "setImageTintList", ColorStateList.valueOf(iconTint))
-                        setColorStateList(R.id.widget_recent_icon, "setImageTintList", ColorStateList.valueOf(iconTint))
+                        // Android 12+: day and night values; with "system" the launcher switches itself
+                        fun bg(id: Int, pick: (WidgetTheme) -> Int) = setColorStateList(
+                            id, "setBackgroundTintList",
+                            ColorStateList.valueOf(pick(day)), ColorStateList.valueOf(pick(night))
+                        )
+                        fun img(id: Int, pick: (WidgetTheme) -> Int) = setColorStateList(
+                            id, "setImageTintList",
+                            ColorStateList.valueOf(pick(day)), ColorStateList.valueOf(pick(night))
+                        )
+                        fun text(id: Int, pick: (WidgetTheme) -> Int) =
+                            setColorInt(id, "setTextColor", pick(day), pick(night))
 
-                        // Tint Quick Add FAB
-                        setColorStateList(R.id.widget_fallback_fab, "setBackgroundTintList", ColorStateList.valueOf(primaryColor))
-                        setColorStateList(R.id.widget_fallback_icon, "setImageTintList", ColorStateList.valueOf(primaryButtonTextColor))
-
-                        // Tint progress bar
-                        setColorStateList(R.id.widget_budget_progress, "setProgressTintList", ColorStateList.valueOf(primaryColor))
-                    } else {
-                        setInt(R.id.widget_fallback_fab, "setBackgroundColor", primaryColor)
-                        setInt(R.id.widget_fallback_icon, "setColorFilter", primaryButtonTextColor)
-                    }
-
-                    // Apply contrast-matched text colors
-                    val amountColor = if (isDarkTheme) {
-                        ColorUtils.blendARGB(primaryColor, Color.WHITE, 0.85f)
-                    } else {
-                        ColorUtils.blendARGB(primaryColor, Color.BLACK, 0.85f)
-                    }
-                    val statNumberColor = if (isDarkTheme) {
-                        ColorUtils.blendARGB(primaryColor, Color.WHITE, 0.70f)
-                    } else {
-                        ColorUtils.blendARGB(primaryColor, Color.BLACK, 0.70f)
-                    }
-
-                    setTextColor(R.id.widget_amount, amountColor)
-                    setTextColor(R.id.widget_daily_avg, statNumberColor)
-                    setTextColor(R.id.widget_last_expense_amount, statNumberColor)
-
-                    // 7. Dynamic FAB Bitmap matching custom shape
-                    val bitmapPath = widgetData.getString("fab_icon_bitmap", null)
-                    if (bitmapPath != null && java.io.File(bitmapPath).exists()) {
-                        val bitmap = android.graphics.BitmapFactory.decodeFile(bitmapPath)
-                        if (bitmap != null) {
-                            setImageViewBitmap(R.id.widget_bitmap_fab, bitmap)
-                            setViewVisibility(R.id.widget_bitmap_fab, View.VISIBLE)
-                            setViewVisibility(R.id.widget_fallback_fab, View.GONE)
-                        } else {
-                            setViewVisibility(R.id.widget_bitmap_fab, View.GONE)
-                            setViewVisibility(R.id.widget_fallback_fab, View.VISIBLE)
+                        bg(R.id.widget_root) { it.edge }
+                        bg(R.id.widget_root_face) { it.surface }
+                        for (id in intArrayOf(R.id.widget_book_chip, R.id.widget_daily_avg_chip, R.id.widget_bottom_right_card)) {
+                            bg(id) { it.tileEdge }
                         }
+                        for (id in intArrayOf(R.id.widget_book_face, R.id.widget_avg_face, R.id.widget_card_face)) {
+                            bg(id) { it.tile }
+                        }
+                        for (id in intArrayOf(R.id.widget_book_icon, R.id.widget_daily_avg_icon, R.id.widget_recent_icon)) {
+                            img(id) { it.icon }
+                        }
+                        for (id in intArrayOf(
+                            R.id.widget_group_name, R.id.widget_amount,
+                            R.id.widget_last_expense_name, R.id.widget_last_expense_amount
+                        )) text(id) { it.text }
+                        for (id in intArrayOf(
+                            R.id.widget_tx_count, R.id.widget_latest_label,
+                            R.id.widget_last_expense_date, R.id.widget_last_expense_empty
+                        )) text(id) { it.textMuted }
+                        text(R.id.widget_daily_avg) { it.accentText }
+                        if (overBudget) setTextColor(R.id.widget_budget_status, red) else text(R.id.widget_budget_status) { it.textMuted }
+
+                        setColorStateList(
+                            R.id.widget_budget_progress, "setProgressTintList",
+                            ColorStateList.valueOf(if (overBudget) red else primaryColor)
+                        )
+                        setColorStateList(
+                            R.id.widget_budget_progress, "setProgressBackgroundTintList",
+                            ColorStateList.valueOf(day.track), ColorStateList.valueOf(night.track)
+                        )
                     } else {
-                        setViewVisibility(R.id.widget_bitmap_fab, View.GONE)
-                        setViewVisibility(R.id.widget_fallback_fab, View.VISIBLE)
+                        // Android 11 and older: tiles keep the neutral resource colours (tinting a
+                        // background there drops its rounded corners); text and icons follow the theme.
+                        val systemDark = (context.resources.configuration.uiMode and
+                            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                            android.content.res.Configuration.UI_MODE_NIGHT_YES
+                        val t = if (themeMode == 2 || (themeMode == 0 && systemDark)) darkTheme else lightTheme
+                        for (id in intArrayOf(R.id.widget_book_icon, R.id.widget_daily_avg_icon, R.id.widget_recent_icon)) {
+                            setInt(id, "setColorFilter", t.icon)
+                        }
+                        setTextColor(R.id.widget_daily_avg, t.accentText)
+                        if (overBudget) setTextColor(R.id.widget_budget_status, red)
                     }
 
                     val groupId = widgetData.getString("group_id", "") ?: ""
 
-                    // 8. Action Intents with unique request codes
+                    // 7. Action Intents with unique request codes
                     val addIntent = Intent(context, MainActivity::class.java).apply {
                         action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
                         data = Uri.parse("expensetracker://addExpense?groupId=$groupId")
@@ -209,7 +214,6 @@ class AddExpenseWidgetProvider : HomeWidgetProvider() {
                     setOnClickPendingIntent(R.id.widget_add_button, pendingAddIntent)
                     setOnClickPendingIntent(R.id.widget_daily_avg_chip, pendingInsightsIntent)
                     setOnClickPendingIntent(R.id.widget_book_chip, pendingOpenIntent)
-                    setOnClickPendingIntent(R.id.widget_tx_chip, pendingOpenIntent)
                     setOnClickPendingIntent(R.id.widget_bottom_right_card, pendingOpenIntent)
                     setOnClickPendingIntent(R.id.widget_root, pendingOpenIntent)
                 }
@@ -217,6 +221,71 @@ class AddExpenseWidgetProvider : HomeWidgetProvider() {
             } catch (e: Exception) {
                 Log.e("ExpenseWidget", "Error updating widget: ${e.message}", e)
             }
+        }
+    }
+}
+
+/** Reads an int that Flutter may have stored as Int or Long. */
+private fun readInt(prefs: SharedPreferences, key: String, fallback: Int): Int = try {
+    prefs.getInt(key, fallback)
+} catch (_: ClassCastException) {
+    try { prefs.getLong(key, fallback.toLong()).toInt() } catch (_: Exception) { fallback }
+}
+
+/**
+ * Widget colours for one theme, toned from the app's seed colour so the widget matches the app:
+ * surfaces carry a light wash of the accent, outlines a stronger one, and the daily average and
+ * icons use the accent itself (lightened on dark, deepened on light for contrast).
+ */
+private data class WidgetTheme(
+    val edge: Int,
+    val surface: Int,
+    val tileEdge: Int,
+    val tile: Int,
+    val track: Int,
+    val text: Int,
+    val textMuted: Int,
+    val accentText: Int,
+    val icon: Int
+) {
+    companion object {
+        private fun mix(base: String, primary: Int, amount: Float) =
+            ColorUtils.blendARGB(Color.parseColor(base), primary, amount)
+
+        fun from(primary: Int, dark: Boolean, amoled: Boolean): WidgetTheme = when {
+            !dark -> WidgetTheme(
+                edge = mix("#D7DBE1", primary, 0.22f),
+                surface = mix("#F4F5F7", primary, 0.07f),
+                tileEdge = mix("#DEE1E7", primary, 0.20f),
+                tile = mix("#FFFFFF", primary, 0.035f),
+                track = mix("#E4E7EB", primary, 0.15f),
+                text = mix("#1B1D21", primary, 0.10f),
+                textMuted = mix("#60656D", primary, 0.15f),
+                accentText = ColorUtils.blendARGB(primary, Color.BLACK, 0.30f),
+                icon = ColorUtils.blendARGB(primary, Color.BLACK, 0.10f)
+            )
+            amoled -> WidgetTheme(
+                edge = mix("#1E2126", primary, 0.25f),
+                surface = Color.BLACK,
+                tileEdge = mix("#24272C", primary, 0.22f),
+                tile = mix("#0D0E10", primary, 0.10f),
+                track = mix("#24272C", primary, 0.20f),
+                text = Color.parseColor("#ECEDEF"),
+                textMuted = mix("#A3A7AE", primary, 0.15f),
+                accentText = ColorUtils.blendARGB(primary, Color.WHITE, 0.35f),
+                icon = ColorUtils.blendARGB(primary, Color.WHITE, 0.25f)
+            )
+            else -> WidgetTheme(
+                edge = mix("#2A2E34", primary, 0.22f),
+                surface = mix("#16181C", primary, 0.08f),
+                tileEdge = mix("#2E3238", primary, 0.20f),
+                tile = mix("#1F2226", primary, 0.10f),
+                track = mix("#2E3238", primary, 0.20f),
+                text = Color.parseColor("#E8E9EC"),
+                textMuted = mix("#A3A7AE", primary, 0.15f),
+                accentText = ColorUtils.blendARGB(primary, Color.WHITE, 0.35f),
+                icon = ColorUtils.blendARGB(primary, Color.WHITE, 0.25f)
+            )
         }
     }
 }

@@ -41,11 +41,13 @@ class MainActivity : FlutterActivity() {
                     try {
                         BankSmsTracker.catchUp(context)
                     } catch (_: Exception) {}
-                    val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-                    val queue = prefs.getString("flutter.pending_upi_approved_queue", "[]") ?: "[]"
-                    // Clear queue once read
-                    prefs.edit().putString("flutter.pending_upi_approved_queue", "[]").apply()
-                    result.success(queue)
+                    // Not cleared here: Flutter calls ackUpiExpenses once each transaction is saved
+                    result.success(UpiAutoConfirm.readApprovedQueue(context))
+                }
+                "ackUpiExpenses" -> {
+                    val ids = (call.arguments as? List<*>)?.filterIsInstance<String>().orEmpty()
+                    if (ids.isNotEmpty()) UpiAutoConfirm.removeFromApprovedQueue(context, ids.toSet())
+                    result.success(true)
                 }
                 "isSmsPermissionGranted" -> {
                     result.success(BankSmsTracker.hasReceivePermission(context) && BankSmsTracker.hasReadPermission(context))
@@ -63,6 +65,21 @@ class MainActivity : FlutterActivity() {
                             REQUEST_SMS_PERMISSION
                         )
                     }
+                }
+                "getBackgroundAccess" -> {
+                    result.success(
+                        mapOf(
+                            "batteryUnrestricted" to BackgroundAccess.isIgnoringBatteryOptimizations(context),
+                            "hasAutostartSetting" to BackgroundAccess.hasAutostartSetting(),
+                            "manufacturer" to BackgroundAccess.manufacturer()
+                        )
+                    )
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    result.success(BackgroundAccess.requestIgnoreBatteryOptimizations(this))
+                }
+                "openAutostartSettings" -> {
+                    result.success(BackgroundAccess.openAutostartSettings(this))
                 }
                 "openAppSettings" -> {
                     try {
@@ -109,14 +126,21 @@ class MainActivity : FlutterActivity() {
     /**
      * ✏️ Edit hands the transaction to AddExpenseScreen, so drop its pending auto-confirm and the
      * prompt notification; otherwise the timeout would log a duplicate.
+     *
+     * If the timeout (or a swipe) already logged it just before the tap, add `alreadyAdded=1` to the
+     * link so Flutter tells the user instead of opening an editor that would save it twice.
      */
     private fun handleUpiEditIntent(intent: Intent?) {
-        val data = intent?.data ?: return
+        if (intent == null) return
+        val data = intent.data ?: return
         if (data.scheme != "expensetracker" || !data.toString().lowercase().contains("upiedit")) return
         val notifId = data.getQueryParameter("notificationId")?.toIntOrNull() ?: return
         try {
             UpiAutoConfirm.discardPending(this, notifId)
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notifId)
+            if (UpiAutoConfirm.wasAutoAdded(this, notifId) && data.getQueryParameter("alreadyAdded") == null) {
+                intent.data = data.buildUpon().appendQueryParameter("alreadyAdded", "1").build()
+            }
         } catch (_: Exception) {}
     }
 
